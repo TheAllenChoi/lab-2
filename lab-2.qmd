@@ -1,6 +1,9 @@
 ---
 title: "Lab 2"
+author: "Allen Choi"
 subtitle: "Advanced Data Visualization"
+format: html
+embed-resources: true
 editor: source
 ---
 
@@ -8,49 +11,48 @@ editor: source
 
 **Create a Quarto file for ALL Lab 2 (no separate files for Parts 1 and 2).**
 
-- Make sure your final file is carefully formatted, so that each analysis is
-clear and concise.
-- Be sure your knitted `.html` file shows **all** your source code, including
-any function definitions. 
+-   Make sure your final file is carefully formatted, so that each analysis is clear and concise.
+-   Be sure your knitted `.html` file shows **all** your source code, including any function definitions.
 
 # Part One: Identifying Bad Visualizations
 
-If you happen to be bored and looking for a sensible chuckle, you should check
-out these [Bad Visualisations](https://badvisualisations.tumblr.com/). Looking through these is also a good exercise in cataloging what makes a visualization
-good or bad. 
+If you happen to be bored and looking for a sensible chuckle, you should check out these [Bad Visualisations](https://badvisualisations.tumblr.com/). Looking through these is also a good exercise in cataloging what makes a visualization good or bad.
 
 ## Dissecting a Bad Visualization
 
-Below is an example of a less-than-ideal visualization from the collection
-linked above. It comes to us from data provided for the [Wellcome Global Monitor 2018 report](https://wellcome.ac.uk/reports/wellcome-global-monitor/2018) by the 
-Gallup World Poll:
+Below is an example of a less-than-ideal visualization from the collection linked above. It comes to us from data provided for the [Wellcome Global Monitor 2018 report](https://wellcome.ac.uk/reports/wellcome-global-monitor/2018) by the Gallup World Poll:
 
-![](images/bad-wellcome-graph.jpg)
+![](image/bad-wellcome-graph.jpg)
 
-1. While there are certainly issues with this image, do your best to tell the
-story of this graph in words. That is, what is this graph telling you? What do
-you think the authors meant to convey with it?
+1.  While there are certainly issues with this image, do your best to tell the story of this graph in words. That is, what is this graph telling you? What do you think the authors meant to convey with it?
 
+    Each country has a varying level of percentage of people who believe that vaccines are safe. Depending on the region which each country is in, there is an overall difference in percentage on average as well. Basically, percentage of vaccine acceptance depends on country as well as region.
 
+2.  List the variables that appear to be displayed in this visualization. *Hint: Variables refer to columns in the data.*
 
-2. List the variables that appear to be displayed in this visualization. 
-*Hint: Variables refer to columns in the data.*
+    The variables that appear to be displayed is % of vaccine acceptance, country, and region.
 
+3.  Now that you're versed in the grammar of graphics (e.g., `ggplot`), list the *aesthetics* used and which *variables* are mapped to each.
 
+    x: percentage of people who believe that vaccines are safe
 
-3. Now that you're versed in the grammar of graphics (e.g., `ggplot`), list the *aesthetics* used and which *variables* are mapped to each.
+    y: country
 
+    color: region
 
+4.  What type of graph would you call this? Meaning, what `geom` would you use to produce this plot?
 
-4. What type of graph would you call this? Meaning, what `geom` would you use
-to produce this plot?
+    I would call it a scatterplot, but with jittered points for each country, so probably geom_jitter().
 
+5.  Provide at least four problems or changes that would improve this graph. *Please format your changes as bullet points!*
 
+    -   It is hard to compare countries in different regions with each other
 
-5. Provide at least four problems or changes that would improve this graph. 
-*Please format your changes as bullet points!*
+    -   The y-axis has no meaning
 
+    -   The legend is unnecessary since the labels are already there
 
+    -   There is too much going on and it takes too much time to understand the message
 
 ## Improving the Bad Visualization
 
@@ -58,56 +60,119 @@ The data for the Wellcome Global Monitor 2018 report can be downloaded at the fo
 
 <!-- at the "Dataset and crosstabs for all countries" link on the right side of the page-->
 
-There are two worksheets in the downloaded dataset file. You may need to read
-them in separately, but you may also just use one if it suffices.
+There are two worksheets in the downloaded dataset file. You may need to read them in separately, but you may also just use one if it suffices.
 
 ```{r}
 #| label: read-in-wellcome-data
+library(tidyverse)
+library(here)
+library(plotly)
+library(ggridges)
+data_dict <- readxl::read_xlsx(here("wgm2018-dataset-crosstabs-all-countries.xlsx"),
+                               sheet = 3)
+data <- readxl::read_xlsx(here("wgm2018-dataset-crosstabs-all-countries.xlsx"),
+                               sheet = 2) |> 
+  select(c(WP5, Q25, Regions_Report))
+data_dict <- data_dict[1, 3] |> 
+  rename(country = `Variable Type & Codes*`) |> 
+  separate_wider_delim(country, delim = ",", names_sep = "-")
 
+data_dict <- data_dict[1, 1:ncol(data_dict)-1]
 
+country_code <- data.frame(t(data_dict)) |> 
+  separate_wider_delim(cols = `t.data_dict.`,
+                       delim = "=",
+                       names_sep = "-") |> 
+  rename(code = `t.data_dict.-1`,
+         country = `t.data_dict.-2`) |> 
+  mutate(code = as.numeric(code))
+
+final <- data |> 
+  drop_na() |> 
+  left_join(country_code, by = join_by(WP5 == code)) |> 
+  select(-WP5) |> 
+  mutate(Q25 = case_when(
+    Q25 == 1 ~ 1,
+    Q25 == 2 ~ 1,
+    .default = 0
+  )) |> 
+  group_by(country) |>
+  summarize(percentage = sum(Q25) / n()) 
+
+regions <- data |> 
+  select(WP5, Regions_Report) |> 
+  distinct(WP5, Regions_Report) |> 
+  left_join(country_code, by = join_by(WP5 == code)) |> 
+  mutate(region = case_when(
+    Regions_Report %in% c(1, 2, 4, 5) ~ "Sub-Saharan Africa",
+    Regions_Report %in% c(3, 13) ~ "Middle East / North Africa",
+    Regions_Report %in% c(6, 7, 8) ~ "Americas",
+    Regions_Report %in% c(9, 10, 11, 12) ~ "Asia",
+    Regions_Report %in% c(15, 16, 17) ~ "Europe",
+    Regions_Report %in% c(14) ~ "Former Soviet Union",
+    .default = "Other"
+  )) |> 
+  select(country, region)
 ```
 
-6. Improve the visualization above by either re-creating it with the issues you
-identified fixed OR by creating a new visualization that you believe tells the
-same story better.
+6.  Improve the visualization above by either re-creating it with the issues you identified fixed OR by creating a new visualization that you believe tells the same story better.
 
 ```{r}
 #| label: new-and-improved-visualization
-
-
+final |> 
+  left_join(regions, by = join_by(country == country)) |> 
+  filter(region != "Other") |> 
+  mutate(region = factor(region,
+                         levels = c("Former Soviet Union", "Europe", "Americas",
+                                    "Middle East / North Africa", "Sub-Saharan Africa", "Asia"))) |> 
+  ggplot(aes(y = region, x = percentage,
+             fill = region,
+             group = region)) +
+  stat_density_ridges(quantiles = 2, quantile_lines = 2) +
+  theme_minimal() +
+  ggtitle("PERCENTAGE OF PEOPLE WHO BELIEVE VACCINES ARE SAFE") +
+  theme(legend.position = "none",
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_blank(),
+        title = element_text(face = "bold")) +
+  labs(y = "",
+       x = "") +
+  scale_x_continuous(limits = c(.2, 1), labels = scales::label_percent())
 ```
 
 # Part Two: Broad Visualization Improvement
 
-The full Wellcome Global Monitor 2018 report can be found here: [https://wellcome.ac.uk/sites/default/files/wellcome-global-monitor-2018.pdf](https://wellcome.ac.uk/sites/default/files/wellcome-global-monitor-2018.pdf). 
-Surprisingly, the visualization above does not appear in the report despite the
-citation in the bottom corner of the image!
+The full Wellcome Global Monitor 2018 report can be found here: <https://wellcome.ac.uk/sites/default/files/wellcome-global-monitor-2018.pdf>. Surprisingly, the visualization above does not appear in the report despite the citation in the bottom corner of the image!
 
 ## Second Data Visualization Improvement
 
 **For this second plot, you must select a plot that uses maps so you can demonstrate your proficiency with the `leaflet` package!**
 
-7. Select a data visualization in the report that you think could be improved. 
-Be sure to cite both the page number and figure title. Do your best to tell the
-story of this graph in words. That is, what is this graph telling you? What do
-you think the authors meant to convey with it?
+7.  Select a data visualization in the report that you think could be improved. Be sure to cite both the page number and figure title. Do your best to tell the story of this graph in words. That is, what is this graph telling you? What do you think the authors meant to convey with it?
 
+    ![](images/clipboard-1019309849.png)
 
+    The map I want to use is on page 65 and is Chart 3.7: Map of trust in doctors and nurses by country. The story the visualization is trying to tell is that certain regions/countries in the world have lower trust in their doctors than other countries. For example, countries in Europe/America have higher overall trust in their doctors/nurses than countries in Asia/Eastern Europe.
 
-8. List the variables that appear to be displayed in this visualization.
+8.  List the variables that appear to be displayed in this visualization.
 
+    -   Countries
 
+    -   Trust level for doctors/nurses
 
-9. Now that you're versed in the grammar of graphics (ggplot), list the
-aesthetics used and which variables are specified for each.
+9.  Now that you're versed in the grammar of graphics (ggplot), list the aesthetics used and which variables are specified for each.
 
+    -   x: Countries
 
+    -   y: Trust level
 
 10. What type of graph would you call this?
 
+    A map with a gradient scale for trust level for each country
 
+11. List all of the problems or things you would improve about this graph.
 
-11. List all of the problems or things you would improve about this graph.  
+    The legend title is misleading as the gradient is measuring "
 
 12. Improve the visualization above by either re-creating it with the issues you identified fixed OR by creating a new visualization that you believe tells the same story better.
 
@@ -120,28 +185,16 @@ aesthetics used and which variables are specified for each.
 ## Third Data Visualization Improvement
 
 **For this third plot, you must use one of the other `ggplot2` extension packages mentioned this week (e.g., `gganimate`, `plotly`, `patchwork`, `cowplot`).**
- 
-13. Select a data visualization in the report that you think could be improved. 
-Be sure to cite both the page number and figure title. Do your best to tell the
-story of this graph in words. That is, what is this graph telling you? What do
-you think the authors meant to convey with it?
 
-
+13. Select a data visualization in the report that you think could be improved. Be sure to cite both the page number and figure title. Do your best to tell the story of this graph in words. That is, what is this graph telling you? What do you think the authors meant to convey with it?
 
 14. List the variables that appear to be displayed in this visualization.
 
-
-
-15. Now that you're versed in the grammar of graphics (ggplot), list the
-aesthetics used and which variables are specified for each.
-
-
+15. Now that you're versed in the grammar of graphics (ggplot), list the aesthetics used and which variables are specified for each.
 
 16. What type of graph would you call this?
 
-
-
-17. List all of the problems or things you would improve about this graph.  
+17. List all of the problems or things you would improve about this graph.
 
 18. Improve the visualization above by either re-creating it with the issues you identified fixed OR by creating a new visualization that you believe tells the same story better.
 
