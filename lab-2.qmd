@@ -202,16 +202,25 @@ map_data <- data |>
 
 country_map_info <- ne_countries(returnclass = "sf")
 country_map_info <- country_map_info |> 
-  inner_join(map_data, by = join_by(name == country))
+  inner_join(map_data, by = join_by(name == country)) |> 
+  mutate(percent = percent * 100,
+         percent = round(percent, digits = 2))
   
-colors <- colorNumeric(palette = "Blues", domain = map_data$percent)
-
+colors <- colorNumeric(palette = "YlGnBu", domain = country_map_info$percent)
 country_map_info |> 
   leaflet() |> 
   addTiles() |> 
-  addPolygons(data = country_map_info, 
-              color = colors(country_map_info$percent)) |> 
-  addLegend(pal = colors, values = country_map_info$percent)
+  addPolygons(color = colors(country_map_info$percent),
+              weight = 2,
+              popup = paste0(
+                "Country:", " ", country_map_info$name, " <br> ",
+                "Percent:", " ", country_map_info$percent),
+              label = paste0(
+                "Percent:", " ", country_map_info$percent, "%"),
+              fillOpacity = 1) |> 
+  addLegend(pal = colors, values = country_map_info$percent,
+            title = "Percent Trust in Doctors/Nurses <br> (Response = 'A lot'/'Some')",
+            opacity = 1)
   
 ```
 
