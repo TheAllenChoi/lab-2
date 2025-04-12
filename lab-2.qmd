@@ -172,14 +172,47 @@ The full Wellcome Global Monitor 2018 report can be found here: <https://wellcom
 
 11. List all of the problems or things you would improve about this graph.
 
-    The legend title is misleading as the gradient is measuring "
+    The legend title is misleading as legend title states "knowledge level" when the actual data is talking about how much they trust their doctors/nurses. Also, it is hard to tell the difference when the gradient is between light green and dark green.
 
 12. Improve the visualization above by either re-creating it with the issues you identified fixed OR by creating a new visualization that you believe tells the same story better.
 
 ```{r}
 #| label: second-improved-visualization
+library(leaflet)
+library(rnaturalearth)
+data <- readxl::read_xlsx(here("wgm2018-dataset-crosstabs-all-countries.xlsx"),
+                               sheet = 2) |> 
+  select(c(WP5, Q11E))
+
+map_data <- data |> 
+  mutate(Q11E = as.character(Q11E)) |> 
+  group_by(WP5) |> 
+  mutate(Q11E = case_when(
+    Q11E == 1 ~ 1,
+    Q11E == 2 ~ 1,
+    .default = 0
+  )) |> 
+  summarize(percent = (sum(Q11E) / n())) |> 
+  left_join(country_code, by = join_by(WP5 == code)) |> 
+  mutate(country = case_when(
+    country == "United States" ~ "United States of America",
+    .default = country
+  ))
 
 
+country_map_info <- ne_countries(returnclass = "sf")
+country_map_info <- country_map_info |> 
+  inner_join(map_data, by = join_by(name == country))
+  
+colors <- colorNumeric(palette = "Blues", domain = map_data$percent)
+
+country_map_info |> 
+  leaflet() |> 
+  addTiles() |> 
+  addPolygons(data = country_map_info, 
+              color = colors(country_map_info$percent)) |> 
+  addLegend(pal = colors, values = country_map_info$percent)
+  
 ```
 
 ## Third Data Visualization Improvement
