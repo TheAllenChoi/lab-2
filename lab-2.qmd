@@ -130,7 +130,7 @@ final |>
              group = region)) +
   stat_density_ridges(quantiles = 2, quantile_lines = 2) +
   theme_minimal() +
-  ggtitle("PERCENTAGE OF PEOPLE WHO BELIEVE VACCINES ARE SAFE") +
+  ggtitle("PERCENTAGE OF PEOPLE WHO BELIEVE \n VACCINES ARE SAFE") +
   theme(legend.position = "none",
         panel.grid.minor.y = element_blank(),
         panel.grid.major.y = element_blank(),
@@ -164,7 +164,7 @@ The full Wellcome Global Monitor 2018 report can be found here: <https://wellcom
 
     -   x: Countries
 
-    -   y: Trust level
+    -   color: Trust level
 
 10. What type of graph would you call this?
 
@@ -172,7 +172,7 @@ The full Wellcome Global Monitor 2018 report can be found here: <https://wellcom
 
 11. List all of the problems or things you would improve about this graph.
 
-    The legend title is misleading as legend title states "knowledge level" when the actual data is talking about how much they trust their doctors/nurses. Also, it is hard to tell the difference when the gradient is between light green and dark green.
+    The legend title is misleading as legend title states "knowledge level" when the actual data is talking about how much they trust their doctors/nurses. Also, it is hard to tell the difference between countries when the gradient is between light green and dark green.
 
 12. Improve the visualization above by either re-creating it with the issues you identified fixed OR by creating a new visualization that you believe tells the same story better.
 
@@ -230,18 +230,93 @@ country_map_info |>
 
 13. Select a data visualization in the report that you think could be improved. Be sure to cite both the page number and figure title. Do your best to tell the story of this graph in words. That is, what is this graph telling you? What do you think the authors meant to convey with it?
 
+    ![](images/clipboard-2867401132.png)
+
+    The visualization I selected is on page 110 and titled Chart 5.2: Perceived Safety of Vaccines by region. I think the graph is trying to tell us that different regions of the world have extremely different views on vaccine safety. Some areas have extremely positive views while other regions have relatively negative views.
+
 14. List the variables that appear to be displayed in this visualization.
+
+    -   Region
+
+    -   Vaccine Safety Opinion
 
 15. Now that you're versed in the grammar of graphics (ggplot), list the aesthetics used and which variables are specified for each.
 
+    -   x: Region
+
+    -   y: Vaccine Safety
+
+    -   fill: Vaccine Safety
+
 16. What type of graph would you call this?
 
-17. List all of the problems or things you would improve about this graph.
+I would call it a stacked bar plot but normalized so that each region adds up to 100%.
 
-18. Improve the visualization above by either re-creating it with the issues you identified fixed OR by creating a new visualization that you believe tells the same story better.
+13. List all of the problems or things you would improve about this graph.
+
+<!-- -->
+
+1.  The graph from top to bottom isn't organized in any way, which makes it hard to identify any patterns
+2.  There is way too much information within each bar, so only selecting a specific opinion (Strongly Agree) would help a lot
+3.  No x-axis
+
+<!-- -->
+
+13. Improve the visualization above by either re-creating it with the issues you identified fixed OR by creating a new visualization that you believe tells the same story better.
 
 ```{r}
 #| label: third-improved-visualization
+library(gganimate)
+library(gifski)
+data <- readxl::read_xlsx(here("wgm2018-dataset-crosstabs-all-countries.xlsx"),
+                               sheet = 2) |> 
+  select(c(Regions_Report, Q25))
 
+data_dict <- readxl::read_xlsx(here("wgm2018-dataset-crosstabs-all-countries.xlsx"),
+                               sheet = 3)
+data_dict <- data_dict[57, 3] |> 
+  rename(region = `Variable Type & Codes*`) |> 
+  separate_wider_delim(region, delim = ",", names_sep = "-")
 
+data_dict <- data_dict[1, 1:ncol(data_dict)-1]
+
+region_codes <- data.frame(t(data_dict)) |> 
+  separate_wider_delim(cols = `t.data_dict.`,
+                       delim = "=",
+                       names_sep = "-") |> 
+  rename(code = `t.data_dict.-1`,
+         region = `t.data_dict.-2`) |> 
+  mutate(code = as.numeric(code))
+
+cleaned_data <- data |> 
+  drop_na() |> 
+  mutate(Q25 = case_when(
+    Q25 == 1 ~ "Strongly Agree",
+    Q25 == 2 ~ "Somewhat Agree",
+    Q25 == 4 ~ "Somewhat Disagree",
+    Q25 == 5 ~ "Strongly Disagree",
+    .default = ""
+  )) |> 
+  left_join(region_codes, by = join_by(Regions_Report == code)) |> 
+  group_by(region) |> 
+  summarize(strongly_agree = sum(Q25 == "Strongly Agree") / n(),
+            somewhat_agree = sum(Q25 == "Somewhat Agree") / n(),
+            somewhat_disagree = sum(Q25 == "Somewhat Disagree") / n(),
+            strongly_disagree = sum(Q25 == "Strongly Disagree") / n()) |> 
+  arrange(desc(strongly_agree))
+
+arranged <- cleaned_data$region
+plot <- cleaned_data |> 
+  pivot_longer(cols = !region) |> 
+  mutate(name = factor(name, 
+                       levels = c("strongly_agree", "somewhat_agree",
+                                  "somewhat_disagree", "strongly_disagree")),
+         region = factor(region, levels = arranged)) |> 
+  ggplot(aes(y = name, x = value)) +
+  geom_bar(stat = "identity") +
+  theme_minimal()
+
+final <- plot + transition_states(region)
+final +
+  ggtitle("Vaccine Opinions in {closest_state}")
 ```
