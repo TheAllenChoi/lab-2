@@ -298,6 +298,7 @@ cleaned_data <- data |>
     .default = ""
   )) |> 
   left_join(region_codes, by = join_by(Regions_Report == code)) |> 
+  filter(region != "Not assigned") |> 
   group_by(region) |> 
   summarize(strongly_agree = sum(Q25 == "Strongly Agree") / n(),
             somewhat_agree = sum(Q25 == "Somewhat Agree") / n(),
@@ -308,15 +309,26 @@ cleaned_data <- data |>
 arranged <- cleaned_data$region
 plot <- cleaned_data |> 
   pivot_longer(cols = !region) |> 
+  mutate(name = case_when(
+    name == "strongly_agree" ~ "Strongly Agree",
+    name == "somewhat_agree" ~ "Somewhat Agree",
+    name == "somewhat_disagree" ~ "Somewhat Disagree",
+    name == "strongly_disagree" ~ "Strongly Disagree"
+  )) |> 
   mutate(name = factor(name, 
-                       levels = c("strongly_agree", "somewhat_agree",
-                                  "somewhat_disagree", "strongly_disagree")),
-         region = factor(region, levels = arranged)) |> 
-  ggplot(aes(y = name, x = value)) +
+                       levels = c("Strongly Agree", "Somewhat Agree",
+                                  "Somewhat Disagree", "Strongly Disagree")),
+         region = factor(region, levels = arranged)) |>
+  ggplot(aes(y = name, x = value, fill = name)) +
   geom_bar(stat = "identity") +
-  theme_minimal()
+  theme_minimal() +
+  theme(legend.position = "none",
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_blank()) +
+  labs(y = "", x = "") +
+  scale_x_continuous(limits = c(0, 0.8), labels = scales::label_percent())
 
 final <- plot + transition_states(region)
 final +
-  ggtitle("Vaccine Opinions in {closest_state}")
+  ggtitle("Percent Opinion on Vaccine Safety in {closest_state}")
 ```
